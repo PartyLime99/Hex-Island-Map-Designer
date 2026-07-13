@@ -144,13 +144,13 @@
   <h1>Hex Island <span>Map Designer</span></h1>
   <button class="btn small" id="btnSidebar">⚙ Settings</button>
   <button class="btn primary" id="btnNew">⟳ New map</button>
-  <button class="btn" id="btnRandAll">🎲 Randomise everything</button>
-  <button class="btn" id="btnShuffle">🔀 Shuffle tiles</button>
+  <button class="btn" id="btnRandAll">🎲 Settings</button>
+  <button class="btn" id="btnShuffle">🎲 Tiles</button>
   <button class="btn" id="btnNums">🎲 Numbers</button>
-  <button class="btn" id="btnPorts">⚓ Ports</button>
+  <button class="btn" id="btnPorts">🎲 Ports</button>
   <button class="btn" id="btnTrim">🌊 Trim sea</button>
   <button class="btn" id="btnPlay">✎ Edit map</button>
-  <button class="btn" id="btnResetFog">Reset fog</button>
+  <button class="btn" id="btnResetFog">☁️ Reset fog</button>
   <div class="spacer"></div>
   <button class="btn" id="btnInstall" style="display:none">⤓ Install app</button>
   <div id="footprint"></div>
@@ -226,7 +226,8 @@
           </select>
           <button class="btn small" id="btnApplyPreset">Apply</button>
         </div>
-        <p class="hint">Seafarers presets use the official tile &amp; port counts from the rulebook. Tweak anything afterwards.</p>
+        <p class="hint" id="presetHint">Presets set up the scenario's layout and use the tiles that scenario calls for — they never change the collection you own or your table size.</p>
+        <label class="chk"><input type="checkbox" id="useAllTiles"> Ignore the scenario's tile list, use my whole collection</label>
       </div>
     </details>
 
@@ -237,7 +238,6 @@
         <div class="row"><label>Main island shape</label>
           <select id="mainShape">
             <option value="hex">Classic Catan hexagon (19 tiles)</option>
-            <option value="hexL">Large hexagon (37 tiles)</option>
             <option value="diamond">Diamond</option>
             <option value="rect">Rectangle</option>
             <option value="blob">Random / organic</option>
@@ -253,7 +253,7 @@
             <option value="random">Random</option>
           </select>
         </div>
-        <div class="row" id="mainShareRow"><label>Main land share</label><input type="range" id="mainShare" min="20" max="100" value="100"><span class="val" id="mainSharev"></span></div>
+        <div class="row" id="mainShareRow"><label>Tiles per main island</label><input type="range" id="mainTiles" min="4" max="40" value="19"><span class="val" id="mainTilesv"></span></div>
         <label class="chk"><input type="checkbox" id="baseMain" checked> Main island uses base-game tiles &amp; numbers <small>(even classic mix)</small></label>
         <div class="row"><label>Outer islands</label><input type="range" id="nOuter" min="0" max="8" value="0"><span class="val" id="nOuterv"></span></div>
         <label class="chk"><input type="checkbox" id="outerNearMain"> Keep outer islands 1 sea tile from the main island</label>
@@ -262,6 +262,12 @@
           <label>Between</label>
           <input type="number" id="randOuterMin" min="0" max="8" value="1"> and
           <input type="number" id="randOuterMax" min="0" max="8" value="4">
+        </div>
+        <div class="row"><label>Tile randomisation</label>
+          <select id="resMode">
+            <option value="random">Random</option>
+            <option value="spread">Keep same resources apart</option>
+          </select>
         </div>
         <div class="row"><label>Island compactness</label><input type="range" id="compact" min="0" max="100" value="70"><span class="val" id="compactv"></span></div>
         <p class="hint">Hexagon shapes fix each main island's size exactly (the land-share slider is then ignored). Gold fields only ever spawn on outer islands. Islands are always placed just one sea tile apart from their nearest neighbour where space allows.</p>
@@ -401,7 +407,7 @@ const RES_META = {
 };
 const PORT_KINDS = ['generic','wood','brick','sheep','wheat','ore'];
 const PIPS = {2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1};
-const SHAPE_FIXED = {hex:19, hexL:37};
+const SHAPE_FIXED = {hex:19};
 const EXP_TILES = {
   base:{wood:4,brick:3,sheep:4,wheat:4,ore:3,desert:1,gold:0,
         ports:{generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1},
@@ -409,7 +415,7 @@ const EXP_TILES = {
   e56:{wood:2,brick:2,sheep:2,wheat:2,ore:2,desert:1,gold:0,
         ports:{generic:1,sheep:1},
         tokens:[2,3,4,5,6,8,9,10,11,12]},
-  sea:{wood:0,brick:0,sheep:0,wheat:0,ore:0,desert:0,gold:2,ports:{},tokens:[]},
+  sea:{wood:1,brick:2,sheep:1,wheat:1,ore:2,desert:2,gold:2,ports:{},tokens:[]},
   sea56:{wood:1,brick:1,sheep:1,wheat:1,ore:1,desert:0,gold:2,ports:{},tokens:[2,3,4,9,10,11]},
   ep:{wood:2,brick:2,sheep:2,wheat:2,ore:2,desert:0,gold:2,ports:{},tokens:[3,4,5,6,8,9,10,11]},
   ck:{wood:0,brick:0,sheep:0,wheat:0,ore:0,desert:0,gold:0,ports:{},tokens:[]},
@@ -427,12 +433,12 @@ const FRESH = () => ({
   tiles:{wood:4,brick:3,sheep:4,wheat:4,ore:3,desert:1,gold:0},
   ports:{generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1},
   scalePct:100, mapW:7, mapH:7, landUse:100,
-  nMain:1, mainShape:'hex', mainPos:'center', mainShare:100,
-  nOuter:0, randOuter:false, randOuterMin:1, randOuterMax:4, compact:70, baseMain:true,
+  nMain:1, mainShape:'hex', mainPos:'center', mainTiles:19,
+  nOuter:0, randOuter:false, randOuterMin:1, randOuterMax:4, compact:70, baseMain:true, resMode:'random',
   hexmm:80, tableW:120, tableL:90, trimSea:true, showTable:false,
   numMode:'balanced', no68:true,
   portMode:'random', portClassic:true, portScope:'main', portUse:100, outerNearMain:false,
-  fogMode:'none', coveredShow:'blank', fogIslandSel:[], fogRandomN:2,
+  fogMode:'none', coveredShow:'blank', fogIslandSel:[], fogRandomN:2, scenario:null, useAllTiles:false,
   useArt:true,
   seed:(Math.random()*1e9)|0, numSeed:1, portSeed:1, resSeed:1,
   fogPaint:{}, swaps:[],
@@ -464,7 +470,7 @@ function hexDist(a,b){
 function pxOf(c,r){return {x:c+0.5*(r&1), y:r*0.866}}
 
 /* ============================== POOLS ============================== */
-function totalLand(){return RES.reduce((s,k)=>s+(S.tiles[k]|0),0)}
+function totalLand(){const t=activeTiles();return RES.reduce((s,k)=>s+(t[k]|0),0)}
 function tokenPool(){
   let pool=[...EXP_TILES.base.tokens];
   if(S.exps.e56)pool.push(...EXP_TILES.e56.tokens);
@@ -531,7 +537,7 @@ function shapeScore(shape,rnd,compactW){
   return (cell,centerCell,centerPx,mine)=>{
     const p=pxOf(cell.c,cell.r);
     const dx=Math.abs(p.x-centerPx.x), dy=Math.abs(p.y-centerPx.y);
-    if(shape==='hex'||shape==='hexL')return hexDist(cell,centerCell)*10+rnd();
+    if(shape==='hex')return hexDist(cell,centerCell)*10+rnd();
     if(shape==='diamond')return (dx+dy)*10+rnd();
     if(shape==='rect')return Math.max(dx,dy*1.15)*10+rnd();
     let cnt=0;for(const m of mine){if(hexDist(m,cell)===1)cnt++}
@@ -613,19 +619,13 @@ function generate(){
 
   // --- budget split: fixed-size hexagon mains vs share-based ---
   const fixed=SHAPE_FIXED[S.mainShape];
-  let mainNeed, outerNeed;
-  if(fixed){
-    mainNeed=Math.min(fixed*S.nMain,totalBudget);
-    if(mainNeed<fixed*S.nMain)warnMsg+=`Not enough owned tiles for the full ${fixed}-tile hexagon${S.nMain>1?'s':''}. `;
-    outerNeed=nOuterEff>0?Math.max(Math.min(nOuterEff*3,totalBudget-mainNeed),totalBudget-mainNeed):0;
-    if(nOuterEff>0&&outerNeed<nOuterEff*3)warnMsg+=`Not enough tiles left over for ${nOuterEff} outer islands. `;
-  }else if(nOuterEff>0){
-    mainNeed=Math.round(totalBudget*S.mainShare/100);
-    if(totalBudget-mainNeed<nOuterEff*3)mainNeed=Math.max(S.nMain*3,totalBudget-nOuterEff*3);
-    outerNeed=totalBudget-mainNeed;
-  }else{
-    mainNeed=totalBudget;outerNeed=0;
-  }
+  const perMain=fixed?fixed:Math.max(1,S.mainTiles|0);   // hexagon locks itself to 19
+  let mainNeed=Math.min(perMain*S.nMain,totalBudget);
+  if(mainNeed<perMain*S.nMain)
+    warnMsg+=`Not enough owned tiles for ${S.nMain>1?S.nMain+' islands of ':''}${perMain} tiles. `;
+  let outerNeed=nOuterEff>0?Math.max(0,totalBudget-mainNeed):0;
+  if(nOuterEff>0&&outerNeed<nOuterEff*3)
+    warnMsg+=`Only ${outerNeed} tiles left for ${nOuterEff} outer islands. `;
   if(mainNeed+outerNeed>interiorCount){
     warnMsg=`Only ${interiorCount} tiles fit inside the map — enlarge it. `;
     const k=interiorCount/(mainNeed+outerNeed);
@@ -644,7 +644,7 @@ function generate(){
     if(n<1)return;
     let got=0;
     if(fixed&&n===fixed){
-      got=placeHexIsland(cells,W,H,ct,S.mainShape==='hexL'?3:2,idx);
+      got=placeHexIsland(cells,W,H,ct,2,idx);
       if(got===0){ // truly no room for the exact shape anywhere
         warnMsg+=`Couldn't fit an exact ${fixed}-tile hexagon — grew an approximate one. `;
         got=growIsland(cells,W,H,ct,n,idx,shapeScore(S.mainShape,rnd,compactW));
@@ -759,6 +759,34 @@ function repairAdjacentGold(cells,rnd){
   }
 }
 
+function spreadResources(cells,rnd){
+  // Reduce same-resource adjacency by swapping tiles that clash.
+  // Deserts/gold are left alone (they're placed under their own rules).
+  const clashes=c=>neighbors(c.c,c.r).filter(([x,y])=>{
+    const n=world.cells.get(key(x,y));
+    return n&&n.type==='land'&&n.res===c.res;
+  }).length;
+  const movable=cells.filter(c=>c.res!=='desert'&&c.res!=='gold');
+  for(let pass=0;pass<600;pass++){
+    const bad=movable.filter(c=>clashes(c)>0);
+    if(!bad.length)break;
+    const a=bad[(rnd()*bad.length)|0];
+    const before=clashes(a);
+    let best=null,bestGain=0;
+    for(const b of movable){
+      if(b===a||b.res===a.res)continue;
+      const beforeTotal=before+clashes(b);
+      [a.res,b.res]=[b.res,a.res];
+      const afterTotal=clashes(a)+clashes(b);
+      [a.res,b.res]=[b.res,a.res];
+      const gain=beforeTotal-afterTotal;
+      if(gain>bestGain){bestGain=gain;best=b}
+    }
+    if(!best)break;
+    [a.res,best.res]=[best.res,a.res];
+  }
+}
+
 function assignResources(){
   const rnd=mulberry32(S.seed*3+S.resSeed*7919);
   const land=[...world.cells.values()].filter(c=>c.type==='land');
@@ -766,8 +794,9 @@ function assignResources(){
   const singleIsland=world.info.length===1;
   const mainLand=shuffle(land.filter(c=>world.mainSet.has(c.island)),rnd);
   const outerLand=land.filter(c=>!world.mainSet.has(c.island));
+  const pool=activeTiles();
   let owned=[];
-  RES.forEach(k=>{for(let i=0;i<(S.tiles[k]|0);i++)owned.push(k)});
+  RES.forEach(k=>{for(let i=0;i<(pool[k]|0);i++)owned.push(k)});
   shuffle(owned,rnd);
   const takeFrom=pred=>{const i=owned.findIndex(pred);return i<0?null:owned.splice(i,1)[0]};
   // --- main islands: gold only allowed when it's the sole island ---
@@ -816,6 +845,11 @@ function assignResources(){
     else c.res=got;
   });
   if(fallback)warnMsg+='Ran out of distinct tiles — a few duplicates were used to fill the map. ';
+  if(S.resMode==='spread'){
+    const byIsl={};
+    [...world.cells.values()].filter(c=>c.type==='land').forEach(c=>{(byIsl[c.island]=byIsl[c.island]||[]).push(c)});
+    Object.values(byIsl).forEach(arr=>spreadResources(arr,rnd));
+  }
 }
 
 function assignTokens(numbered,pool,rnd){
@@ -912,8 +946,9 @@ function assignPorts(){
   };
 
   // ---- build the port pools ----
+  const portPool=activePorts();
   let ownedPorts=[];
-  PORT_KINDS.forEach(k=>{for(let i=0;i<(S.ports[k]|0);i++)ownedPorts.push(k)});
+  PORT_KINDS.forEach(k=>{for(let i=0;i<(portPool[k]|0);i++)ownedPorts.push(k)});
   shuffle(ownedPorts,rnd);
   let mainPool, outerPool;
   if(S.baseMain){
@@ -1448,7 +1483,9 @@ function updateReadouts(){
   document.getElementById('designtools').style.display=playMode?'none':'flex';
   document.getElementById('zoomlvl').textContent=Math.round(zoom*100)+'%';
   document.getElementById('btnTrim').classList.toggle('toggled',S.trimSea);
-  document.getElementById('mainShareRow').classList.toggle('off',!!SHAPE_FIXED[S.mainShape]);
+  const fx=SHAPE_FIXED[S.mainShape];
+  document.getElementById('mainShareRow').classList.toggle('off',!!fx);
+  if(fx){$('mainTiles').value=fx;$('mainTilesv').textContent=fx}
 }
 function buildFogIslandUI(){
   const box=document.getElementById('fogIslands');
@@ -1480,72 +1517,108 @@ function buildPoolInputs(){
 }
 function clearEdits(){S.fogPaint={};S.fogIslandSel=[];S.swaps=[]}
 
-/* ============================== PRESETS (official Seafarers setups) ============================== */
-const BASE_PORTS={generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1}; // 4× 3:1 + 5× 2:1
+/* ============================== PRESETS ============================== */
+/* A preset is a SCENARIO RECIPE. It says what the physical scenario needs
+   (tiles, ports, layout) — it never edits the tiles/ports you own or your
+   table size. If your collection can't cover a scenario, you get a warning
+   telling you exactly what's short. */
+const BASE_PORTS={generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1};
 const PRESETS={
-  std34:{exps:{e56:false,sea:false,sea56:false,ep:false,ck:false},pool:true,
-    mapW:7,mapH:7,landUse:100,nMain:1,mainShape:'hex',mainPos:'center',mainShare:100,
-    nOuter:0,compact:90,
+  std34:{label:'Standard game (3–4)',needExps:[],
+    tiles:{wood:4,brick:3,sheep:4,wheat:4,ore:3,desert:1,gold:0},ports:BASE_PORTS,
+    mapW:7,mapH:7,nMain:1,mainShape:'hex',mainPos:'center',mainTiles:19,nOuter:0,compact:90,
     numMode:'balanced',no68:true,portMode:'random',portClassic:true,portScope:'main',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  std56:{exps:{e56:true,sea:false,sea56:false,ep:false,ck:false},pool:true,
-    mapW:9,mapH:8,landUse:100,nMain:1,mainShape:'blob',mainPos:'center',mainShare:100,
-    nOuter:0,compact:95,
-    numMode:'balanced',no68:true,portMode:'random',portScope:'main',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  // Rulebook: 28 land (5 of each resource, 1 desert, 2 gold), main island + small islands, 9 ports on main
-  sf_newshores:{exps:{e56:false,sea:true,sea56:false,ep:false,ck:false},
-    tilesOverride:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:1,gold:2},portsOverride:BASE_PORTS,
-    mapW:13,mapH:10,landUse:100,nMain:1,mainShape:'hex',mainPos:'center',mainShare:100,
-    nOuter:3,compact:85,
-    numMode:'balanced',no68:true,portMode:'random',portScope:'main',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  // Rulebook: 23 land (5 wood/sheep/wheat, 4 brick/ore), four islands, ports everywhere
-  sf_fourislands:{exps:{e56:false,sea:true,sea56:false,ep:false,ck:false},
-    tilesOverride:{wood:5,brick:4,sheep:5,wheat:5,ore:4,desert:0,gold:0},portsOverride:BASE_PORTS,
-    mapW:12,mapH:10,landUse:100,nMain:4,mainShape:'blob',mainPos:'center',mainShare:100,
-    nOuter:0,compact:85,
-    numMode:'balanced',no68:true,portMode:'random',portScope:'all',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  // Rulebook: two revealed islands + a facedown fog region between them (red discs may touch)
-  sf_fogislands:{exps:{e56:false,sea:true,sea56:false,ep:false,ck:false},
-    tilesOverride:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:0,gold:2},portsOverride:BASE_PORTS,
-    mapW:13,mapH:10,landUse:100,nMain:2,mainShape:'blob',mainPos:'center',mainShare:62,
-    nOuter:3,compact:75,
-    numMode:'balanced',no68:false,portMode:'random',portScope:'main',portUse:100,
-    fogMode:'coverLandOther',coveredShow:'blank'},
-  // Rulebook: 30 land incl 3 deserts, big main island + 3 small ones beyond the desert
-  sf_desert:{exps:{e56:false,sea:true,sea56:false,ep:false,ck:false},
-    tilesOverride:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:3,gold:2},portsOverride:BASE_PORTS,
-    mapW:13,mapH:10,landUse:100,nMain:1,mainShape:'blob',mainPos:'west',mainShare:72,
-    nOuter:3,compact:90,
-    numMode:'balanced',no68:true,portMode:'random',portScope:'main',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  sf_newworld:{exps:{e56:false,sea:true,sea56:false,ep:false,ck:false},pool:true,
-    mapW:13,mapH:10,landUse:100,nMain:2,mainShape:'blob',mainPos:'random',mainShare:60,
-    nOuter:4,compact:60,
-    numMode:'random',no68:true,portMode:'random',portScope:'all',portUse:100,
-    fogMode:'none',coveredShow:'blank'},
-  big_ep:{exps:{e56:true,sea:true,sea56:true,ep:true,ck:false},pool:true,
-    mapW:18,mapH:13,landUse:100,nMain:2,mainShape:'blob',mainPos:'center',mainShare:55,
-    nOuter:6,compact:70,
-    numMode:'balanced',no68:true,portMode:'random',portScope:'all',portUse:100,
-    fogMode:'coverOther',coveredShow:'number'},
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  std56:{label:'Standard game (5–6)',needExps:['e56'],
+    tiles:{wood:6,brick:5,sheep:6,wheat:6,ore:5,desert:2,gold:0},ports:{generic:5,wood:1,brick:1,sheep:2,wheat:1,ore:1},
+    mapW:9,mapH:8,nMain:1,mainShape:'blob',mainPos:'center',mainTiles:30,nOuter:0,compact:95,
+    numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'main',portUse:100,
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  sf_newshores:{label:'Heading for New Shores',needExps:['sea'],
+    tiles:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:1,gold:2},ports:BASE_PORTS,
+    mapW:13,mapH:10,nMain:1,mainShape:'hex',mainPos:'center',mainTiles:19,nOuter:3,compact:85,
+    numMode:'balanced',no68:true,portMode:'random',portClassic:true,portScope:'main',portUse:100,
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  sf_fourislands:{label:'The Four Islands',needExps:['sea'],
+    tiles:{wood:5,brick:4,sheep:5,wheat:5,ore:4,desert:0,gold:0},ports:BASE_PORTS,
+    mapW:12,mapH:10,nMain:4,mainShape:'blob',mainPos:'center',mainTiles:6,nOuter:0,compact:85,
+    numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  sf_fogislands:{label:'The Fog Islands',needExps:['sea'],
+    tiles:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:0,gold:2},ports:BASE_PORTS,
+    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:9,nOuter:3,compact:75,
+    numMode:'balanced',no68:false,portMode:'random',portClassic:false,portScope:'main',portUse:100,
+    fogMode:'coverLandOther',coveredShow:'blank',resMode:'random'},
+  sf_desert:{label:'Through the Desert',needExps:['sea'],
+    tiles:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:3,gold:2},ports:BASE_PORTS,
+    mapW:13,mapH:10,nMain:1,mainShape:'blob',mainPos:'west',mainTiles:22,nOuter:3,compact:90,
+    numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'main',portUse:100,
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  sf_newworld:{label:'New World (random)',needExps:['sea'],
+    tiles:null,ports:null,   // null = use whatever the player owns
+    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'random',mainTiles:12,nOuter:4,compact:60,
+    numMode:'random',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
+    fogMode:'none',coveredShow:'blank',resMode:'random'},
+  big_ep:{label:'Big map (E&P scale)',needExps:['sea'],
+    tiles:null,ports:null,
+    mapW:18,mapH:13,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:16,nOuter:6,compact:70,
+    numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
+    fogMode:'coverOther',coveredShow:'number',resMode:'random'},
 };
+const EXP_LABEL={e56:'the 5–6 player extension',sea:'Seafarers',sea56:'the Seafarers 5–6 extension',ep:'Explorers & Pirates'};
+
+// What the scenario asks for vs what you own.
+function presetShortfall(p){
+  const miss=[];
+  (p.needExps||[]).forEach(e=>{if(!S.exps[e])miss.push('You haven\'t ticked '+EXP_LABEL[e]+'.')});
+  if(p.tiles){
+    RES.forEach(k=>{
+      const need=p.tiles[k]|0, have=S.tiles[k]|0;
+      if(need>have)miss.push(`needs ${need} ${RES_META[k].name.toLowerCase()} (you have ${have})`);
+    });
+  }
+  if(p.ports){
+    PORT_KINDS.forEach(k=>{
+      const need=p.ports[k]|0, have=S.ports[k]|0;
+      if(need>have)miss.push(`needs ${need} ${k==='generic'?'3:1':'2:1 '+k} ports (you have ${have})`);
+    });
+  }
+  return miss;
+}
+
 function applyPreset(name){
   const p=PRESETS[name];if(!p)return;
-  const keep={hexmm:S.hexmm,tableW:S.tableW,tableL:S.tableL,useArt:S.useArt,trimSea:S.trimSea};
-  Object.entries(p).forEach(([k,v])=>{
-    if(!['exps','pool','tilesOverride','portsOverride'].includes(k))S[k]=v;
-  });
-  S.exps={...p.exps};
-  Object.assign(S,keep);
-  S.portClassic=!!p.portClassic;S.outerNearMain=!!p.outerNearMain;
-  S.scalePct=100;clearEdits();
-  if(p.tilesOverride){S.tiles={...p.tilesOverride};S.ports={...(p.portsOverride||BASE_PORTS)}}
-  else if(p.pool){const d=expansionDefaults();S.tiles={...d.tiles};S.ports={...d.ports}}
+  // layout settings only — the collection and table are the player's, not the scenario's
+  ['mapW','mapH','nMain','mainShape','mainPos','mainTiles','nOuter','compact',
+   'numMode','no68','portMode','portClassic','portScope','portUse',
+   'fogMode','coveredShow','resMode'].forEach(k=>{if(p[k]!==undefined)S[k]=p[k]});
+  S.landUse=100;S.randOuter=false;S.outerNearMain=!!p.outerNearMain;
+  S.scenario=p.tiles?name:null;      // which tiles the scenario draws
   S.seed=(Math.random()*1e9)|0;
-  syncUI();buildPoolInputs();regen();
+  clearEdits();
+  const miss=presetShortfall(p);
+  const el=document.getElementById('presetHint');
+  if(miss.length){
+    el.innerHTML='<span class="warn">⚠ '+PRESETS[name].label+' '+miss.join('; ')+
+      '. The map will be built from what you own instead.</span>';
+  }else{
+    el.innerHTML='<span class="okc">✓ '+PRESETS[name].label+' — your collection covers it.</span>';
+  }
+  syncUI();regen();
+}
+
+// The tile pool a map draws from: a scenario's recipe (capped by what you own), or your whole collection.
+function activeTiles(){
+  const p=(!S.useAllTiles)&&S.scenario&&PRESETS[S.scenario];
+  if(!p||!p.tiles)return {...S.tiles};
+  const t={};RES.forEach(k=>t[k]=Math.min(p.tiles[k]|0,S.tiles[k]|0));
+  return t;
+}
+function activePorts(){
+  const p=(!S.useAllTiles)&&S.scenario&&PRESETS[S.scenario];
+  if(!p||!p.ports)return {...S.ports};
+  const t={};PORT_KINDS.forEach(k=>t[k]=Math.min(p.ports[k]|0,S.ports[k]|0));
+  return t;
 }
 
 /* ============================== STORAGE ============================== */
@@ -1632,17 +1705,20 @@ async function loadDefaults(){
 /* ============================== WIRING ============================== */
 function normalizeState(){
   if(S.portMode==='classic'){S.portMode='random';S.portClassic=true}
+  if(S.mainShape==='hexL')S.mainShape='hex';               // retired shape
+  if(S.mainTiles===undefined)S.mainTiles=19;               // replaced mainShare
 }
 function regen(){normalizeState();generate();render()}
 function $(id){return document.getElementById(id)}
-const SLIDERS=[['mapW',''],['mapH',''],['landUse','%'],['nMain',''],['mainShare','%'],['nOuter',''],['compact','%'],['portUse','%'],['fogRandomN','']];
+const SLIDERS=[['mapW',''],['mapH',''],['landUse','%'],['nMain',''],['mainTiles',''],['nOuter',''],['compact','%'],['portUse','%'],['fogRandomN','']];
 
 function syncUI(){
   $('exp56').checked=S.exps.e56;$('expSea').checked=S.exps.sea;$('expSea56').checked=S.exps.sea56;
   $('expEP').checked=S.exps.ep;$('expCK').checked=S.exps.ck;
   SLIDERS.forEach(([i,suf])=>{$(i).value=S[i];$(i+'v').textContent=S[i]+suf});
   $('hexmm').value=S.hexmm;$('tableW').value=S.tableW;$('tableL').value=S.tableL;
-  $('mainShape').value=S.mainShape;$('mainPos').value=S.mainPos;
+  $('mainShape').value=S.mainShape;$('mainPos').value=S.mainPos;$('resMode').value=S.resMode;
+  $('useAllTiles').checked=!!S.useAllTiles;
   $('randOuter').checked=S.randOuter;
   $('randOuterMin').value=S.randOuterMin;$('randOuterMax').value=S.randOuterMax;
   $('randOuterRow').style.display=S.randOuter?'flex':'none';
@@ -1672,6 +1748,10 @@ function wire(){
       clearEdits();regen()});
   });
   ['mainShape','mainPos'].forEach(i=>$(i).addEventListener('change',e=>{S[i]=e.target.value;clearEdits();regen()}));
+  $('resMode').addEventListener('change',e=>{S.resMode=e.target.value;assignResources();assignNumbers();applyFog();render()});
+  $('useAllTiles').addEventListener('change',e=>{
+    S.useAllTiles=e.target.checked;clearEdits();regen();
+  });
   $('randOuter').addEventListener('change',e=>{
     S.randOuter=e.target.checked;
     if(S.randOuter)S.seed=(Math.random()*1e9)|0;
@@ -1703,9 +1783,9 @@ function wire(){
     const ri=(lo,hi)=>lo+((Math.random()*(hi-lo+1))|0);
     // Map controls
     S.nMain=pick([1,1,1,2,2,3,4]);
-    S.mainShape=pick(['hex','hex','hexL','diamond','rect','blob','blob']);
+    S.mainShape=pick(['hex','hex','diamond','rect','blob','blob']);
     S.mainPos=pick(['center','center','west','east','north','south','random']);
-    S.mainShare=ri(40,100);
+    S.mainTiles=ri(8,24);
     S.randOuter=false;S.nOuter=ri(0,8);
     S.outerNearMain=Math.random()<0.35;
     S.compact=ri(30,100);
@@ -1714,6 +1794,7 @@ function wire(){
     S.portMode=pick(['random','random','near','far']);
     S.portScope=pick(['all','all','main']);
     S.portUse=ri(60,100);
+    S.resMode=pick(['random','random','spread']);
     // Fog
     const fogChoices=S.nOuter>0
       ?['none','none','coverOther','coverLandOther','randomOuter','coverAllLand','coverAll']
