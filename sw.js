@@ -1,6 +1,6 @@
 /* Service worker: makes the app work fully offline.
    Bump CACHE_VERSION whenever you change index.html so users get the update. */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `map-designer-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -13,6 +13,7 @@ const ASSETS = [
   './icons/maskable-512.png',
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
+  './icons/logo.png',
 ];
 
 // Pre-cache the app shell on install.
