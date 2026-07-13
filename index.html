@@ -166,7 +166,11 @@
           <input type="number" id="tableL" value="90" min="40" max="400"> <span class="hint">cm</span>
         </div>
         <div class="row"><label>Tile width</label><input type="number" id="hexmm" value="80" min="30" max="150"> <span class="hint">mm</span></div>
-        <div class="btnrow"><button class="btn small" id="btnFit">Fit map to table</button></div>
+        <div class="btnrow">
+          <button class="btn small" id="btnFit">Fit map to table</button>
+          <button class="btn small" id="btnSaveTable">★ Save table defaults</button>
+        </div>
+        <p class="hint" id="tableDefHint"></p>
         <label class="chk"><input type="checkbox" id="showTable"> Show table outline on map</label>
         <p class="hint">The board is checked against your table in both orientations — if it only fits rotated 90°, you'll see "(rotated)".</p>
         <details style="margin-top:8px">
@@ -199,8 +203,7 @@
         <div class="grid2" id="portInputs"></div>
         <div class="btnrow">
           <button class="btn small" id="btnResetPool">Reset to expansion defaults</button>
-          <button class="btn small" id="btnSaveDefaults">★ Save as my defaults</button>
-          <button class="btn small" id="btnClearDefaults">Clear my defaults</button>
+          <button class="btn small" id="btnSavePool">★ Save my collection</button>
         </div>
         <p class="hint" id="defaultsHint"></p>
       </div>
@@ -254,7 +257,12 @@
         <label class="chk"><input type="checkbox" id="baseMain" checked> Main island uses base-game tiles &amp; numbers <small>(even classic mix)</small></label>
         <div class="row"><label>Outer islands</label><input type="range" id="nOuter" min="0" max="8" value="0"><span class="val" id="nOuterv"></span></div>
         <label class="chk"><input type="checkbox" id="outerNearMain"> Keep outer islands 1 sea tile from the main island</label>
-        <div class="btnrow"><button class="btn small" id="btnRandIslands">🎲 Randomise number of islands</button></div>
+        <label class="chk"><input type="checkbox" id="randOuter"> Randomise number of outer islands each new map</label>
+        <div class="row" id="randOuterRow" style="display:none">
+          <label>Between</label>
+          <input type="number" id="randOuterMin" min="0" max="8" value="1"> and
+          <input type="number" id="randOuterMax" min="0" max="8" value="4">
+        </div>
         <div class="row"><label>Island compactness</label><input type="range" id="compact" min="0" max="100" value="70"><span class="val" id="compactv"></span></div>
         <p class="hint">Hexagon shapes fix each main island's size exactly (the land-share slider is then ignored). Gold fields only ever spawn on outer islands. Islands are always placed just one sea tile apart from their nearest neighbour where space allows.</p>
       </div>
@@ -279,7 +287,7 @@
         <label class="chk"><input type="checkbox" id="portClassic" checked> Classic Catan port positions <small>(standard board layout)</small></label>
         <div class="row"><label>Distribution</label>
           <select id="portMode">
-            <option value="random">Random along coast</option>
+            <option value="random" selected>Random along coast</option>
             <option value="near">2:1 near their resource</option>
             <option value="far">2:1 far from their resource</option>
           </select>
@@ -327,6 +335,12 @@
     <details>
       <summary>Save / load</summary>
       <div class="sec">
+        <div class="btnrow" style="margin-top:0">
+          <button class="btn small primary" id="btnSaveDefaults">★ Save ALL settings as my defaults</button>
+          <button class="btn small" id="btnClearDefaults">Clear my defaults</button>
+        </div>
+        <p class="hint" id="allDefHint">Saved defaults load automatically every time you open the app. The table and collection sections have their own save buttons if you only want to remember those.</p>
+        <div style="border-top:1px solid var(--line); margin:10px 0"></div>
         <div class="row">
           <input type="text" id="slotName" placeholder="Setup name…" style="flex:2">
           <button class="btn small" id="btnSave">Save</button>
@@ -402,13 +416,19 @@ const EXP_TILES = {
 };
 
 /* ============================== STATE ============================== */
+// which settings belong to which "save my defaults" button
+const SECTION_KEYS = {
+  table: ['hexmm','tableW','tableL','showTable','trimSea','mapW','mapH','landUse'],
+  pool:  ['exps','tiles','ports'],
+};
+
 const FRESH = () => ({
   exps:{e56:false, sea:false, sea56:false, ep:false, ck:false},
   tiles:{wood:4,brick:3,sheep:4,wheat:4,ore:3,desert:1,gold:0},
   ports:{generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1},
   scalePct:100, mapW:7, mapH:7, landUse:100,
   nMain:1, mainShape:'hex', mainPos:'center', mainShare:100,
-  nOuter:0, compact:70, baseMain:true,
+  nOuter:0, randOuter:false, randOuterMin:1, randOuterMax:4, compact:70, baseMain:true,
   hexmm:80, tableW:120, tableL:90, trimSea:true, showTable:false,
   numMode:'balanced', no68:true,
   portMode:'random', portClassic:true, portScope:'main', portUse:100, outerNearMain:false,
@@ -569,9 +589,19 @@ function mainCenters(W,H,rnd){
   }));
 }
 
+function rollOuter(){
+  // evaluated at generation time, so every "New map" (new seed) re-rolls the count
+  if(!S.randOuter)return S.nOuter;
+  let lo=Math.max(0,Math.min(8,S.randOuterMin|0));
+  let hi=Math.max(0,Math.min(8,S.randOuterMax|0));
+  if(lo>hi)[lo,hi]=[hi,lo];
+  return lo+Math.floor(mulberry32(S.seed*101+7)()*(hi-lo+1));
+}
+
 function generate(){
   const rnd=mulberry32(S.seed);
   warnMsg='';
+  const nOuterEff=rollOuter();
   const {W,H,f}=effDims();
   const cells=new Map();
   for(let r=0;r<H;r++)for(let c=0;c<W;c++)cells.set(key(c,r),{c,r,type:'sea',island:-1,res:null,number:null,port:null,portDir:0,hidden:false,revealed:false});
@@ -587,11 +617,11 @@ function generate(){
   if(fixed){
     mainNeed=Math.min(fixed*S.nMain,totalBudget);
     if(mainNeed<fixed*S.nMain)warnMsg+=`Not enough owned tiles for the full ${fixed}-tile hexagon${S.nMain>1?'s':''}. `;
-    outerNeed=S.nOuter>0?Math.max(Math.min(S.nOuter*3,totalBudget-mainNeed),totalBudget-mainNeed):0;
-    if(S.nOuter>0&&outerNeed<S.nOuter*3)warnMsg+=`Not enough tiles left over for ${S.nOuter} outer islands. `;
-  }else if(S.nOuter>0){
+    outerNeed=nOuterEff>0?Math.max(Math.min(nOuterEff*3,totalBudget-mainNeed),totalBudget-mainNeed):0;
+    if(nOuterEff>0&&outerNeed<nOuterEff*3)warnMsg+=`Not enough tiles left over for ${nOuterEff} outer islands. `;
+  }else if(nOuterEff>0){
     mainNeed=Math.round(totalBudget*S.mainShare/100);
-    if(totalBudget-mainNeed<S.nOuter*3)mainNeed=Math.max(S.nMain*3,totalBudget-S.nOuter*3);
+    if(totalBudget-mainNeed<nOuterEff*3)mainNeed=Math.max(S.nMain*3,totalBudget-nOuterEff*3);
     outerNeed=totalBudget-mainNeed;
   }else{
     mainNeed=totalBudget;outerNeed=0;
@@ -628,10 +658,10 @@ function generate(){
 
   // --- outer islands: seeded exactly one sea tile from existing land where possible ---
   let placedOuter=0;
-  if(S.nOuter>0&&outerNeed>0){
-    const perO=Math.floor(outerNeed/S.nOuter);
-    let extraO=outerNeed-perO*S.nOuter;
-    for(let i=0;i<S.nOuter;i++){
+  if(nOuterEff>0&&outerNeed>0){
+    const perO=Math.floor(outerNeed/nOuterEff);
+    let extraO=outerNeed-perO*nOuterEff;
+    for(let i=0;i<nOuterEff;i++){
       const n=perO+(extraO-->0?1:0);
       if(n<1)continue;
       const land=[...cells.values()].filter(c=>c.type==='land');
@@ -1571,17 +1601,32 @@ async function renderSlots(){
     delete slots[b.dataset.del];await storeSet('catan:slots',slots);renderSlots();
   });
 }
-async function saveDefaults(){
-  if(!hasStore){alert('Saving isn\'t available in this environment — use Export/Import files instead.');return}
-  await storeSet('catan:defaults',S);
-  document.getElementById('defaultsHint').innerHTML='<span class="okc">✓ Saved — these settings will load automatically next time.</span>';
+async function saveDefaults(section){
+  if(!hasStore){alert("Saving isn't available in this environment — use Export/Import files instead.");return}
+  const cur=await storeGet('catan:defaults')||{};
+  let next,msg,hint;
+  if(section){
+    next={...cur};
+    SECTION_KEYS[section].forEach(k=>{next[k]=JSON.parse(JSON.stringify(S[k]))});
+    msg=section==='table'?'Table settings saved as defaults.':'Your collection saved as defaults.';
+    hint=section==='table'?'tableDefHint':'defaultsHint';
+  }else{
+    next={...S};
+    msg="All settings saved — they'll load automatically next time.";
+    hint='allDefHint';
+  }
+  delete next.seed;delete next.fogPaint;delete next.swaps; // never pin one specific map
+  await storeSet('catan:defaults',next);
+  document.getElementById(hint).innerHTML='<span class="okc">✓ '+msg+'</span>';
 }
 async function loadDefaults(){
   if(!hasStore)return false;
   const d=await storeGet('catan:defaults');
-  if(d){S={...FRESH(),...d};S.seed=(Math.random()*1e9)|0;clearEdits();
-    document.getElementById('defaultsHint').innerHTML='Loaded your saved defaults.';return true}
-  return false;
+  if(!d)return false;
+  S={...FRESH(),...d};   // partial (per-section) saves merge over the built-in defaults
+  S.seed=(Math.random()*1e9)|0;
+  clearEdits();
+  return true;
 }
 
 /* ============================== WIRING ============================== */
@@ -1598,6 +1643,12 @@ function syncUI(){
   SLIDERS.forEach(([i,suf])=>{$(i).value=S[i];$(i+'v').textContent=S[i]+suf});
   $('hexmm').value=S.hexmm;$('tableW').value=S.tableW;$('tableL').value=S.tableL;
   $('mainShape').value=S.mainShape;$('mainPos').value=S.mainPos;
+  $('randOuter').checked=S.randOuter;
+  $('randOuterMin').value=S.randOuterMin;$('randOuterMax').value=S.randOuterMax;
+  $('randOuterRow').style.display=S.randOuter?'flex':'none';
+  $('nOuter').disabled=S.randOuter;
+  const nOuterRow=$('nOuter').closest&&$('nOuter').closest('.row');
+  if(nOuterRow)nOuterRow.classList.toggle('off',S.randOuter);
   $('numMode').value=S.numMode;$('no68').checked=S.no68;
   $('portMode').value=S.portMode;$('portScope').value=S.portScope;$('portClassic').checked=S.portClassic;$('outerNearMain').checked=S.outerNearMain;
   $('fogMode').value=S.fogMode;$('coveredShow').value=S.coveredShow;
@@ -1609,14 +1660,27 @@ function wire(){
     $(id).addEventListener('change',e=>{S.exps[k]=e.target.checked;resetPool();clearEdits();regen()});
   });
   $('btnResetPool').onclick=()=>{resetPool();clearEdits();regen()};
-  $('btnSaveDefaults').onclick=saveDefaults;
-  $('btnClearDefaults').onclick=async()=>{await storeDel('catan:defaults');$('defaultsHint').textContent='Defaults cleared.'};
+  $('btnSaveDefaults').onclick=()=>saveDefaults(null);
+  $('btnSaveTable').onclick=()=>saveDefaults('table');
+  $('btnSavePool').onclick=()=>saveDefaults('pool');
+  $('btnClearDefaults').onclick=async()=>{await storeDel('catan:defaults');
+    ['defaultsHint','tableDefHint'].forEach(i=>$(i).textContent='');
+    $('allDefHint').textContent='Defaults cleared — the app will start with the standard setup.'};
   SLIDERS.forEach(([i,suf])=>{
     $(i).addEventListener('input',e=>{S[i]=+e.target.value;$(i+'v').textContent=e.target.value+suf;
       if(i==='fogRandomN'){applyFog();render();return}
       clearEdits();regen()});
   });
   ['mainShape','mainPos'].forEach(i=>$(i).addEventListener('change',e=>{S[i]=e.target.value;clearEdits();regen()}));
+  $('randOuter').addEventListener('change',e=>{
+    S.randOuter=e.target.checked;
+    if(S.randOuter)S.seed=(Math.random()*1e9)|0;
+    syncUI();clearEdits();regen();
+  });
+  ['randOuterMin','randOuterMax'].forEach(i=>$(i).addEventListener('change',e=>{
+    S[i]=Math.max(0,Math.min(8,+e.target.value||0));
+    syncUI();clearEdits();regen();
+  }));
   ['hexmm','tableW','tableL'].forEach(i=>$(i).addEventListener('change',e=>{S[i]=+e.target.value||S[i];updateReadouts()}));
   $('trimSea').addEventListener('change',e=>{S.trimSea=e.target.checked;render()});
   $('showTable').addEventListener('change',e=>{S.showTable=e.target.checked;render()});
@@ -1634,7 +1698,6 @@ function wire(){
   $('portMode').addEventListener('change',e=>{S.portMode=e.target.value;assignPorts();render()});
   $('portClassic').addEventListener('change',e=>{S.portClassic=e.target.checked;assignPorts();render()});
   $('outerNearMain').addEventListener('change',e=>{S.outerNearMain=e.target.checked;clearEdits();regen()});
-  $('btnRandIslands').onclick=()=>{S.nOuter=(Math.random()*9)|0;syncUI();clearEdits();regen()};
   $('btnRandAll').onclick=()=>{
     const pick=a=>a[(Math.random()*a.length)|0];
     const ri=(lo,hi)=>lo+((Math.random()*(hi-lo+1))|0);
@@ -1643,7 +1706,7 @@ function wire(){
     S.mainShape=pick(['hex','hex','hexL','diamond','rect','blob','blob']);
     S.mainPos=pick(['center','center','west','east','north','south','random']);
     S.mainShare=ri(40,100);
-    S.nOuter=ri(0,8);
+    S.randOuter=false;S.nOuter=ri(0,8);
     S.outerNearMain=Math.random()<0.35;
     S.compact=ri(30,100);
     // Ports
