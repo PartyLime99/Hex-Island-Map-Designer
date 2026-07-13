@@ -261,7 +261,7 @@
             <option value="random">Random</option>
           </select>
         </div>
-        <div class="row" id="mainShareRow"><label>Tiles per main island</label><input type="range" id="mainTiles" min="4" max="40" value="19"><span class="val" id="mainTilesv"></span></div>
+        <div class="row" id="mainShareRow"><label>Main island tiles (total)</label><input type="range" id="mainTiles" min="4" max="60" value="19"><span class="val" id="mainTilesv"></span></div>
         <label class="chk"><input type="checkbox" id="baseMain" checked> Main island uses base-game tiles &amp; numbers <small>(even classic mix)</small></label>
         <div class="row"><label>Outer islands</label><input type="range" id="nOuter" min="0" max="8" value="0"><span class="val" id="nOuterv"></span></div>
         <label class="chk"><input type="checkbox" id="outerNearMain"> Keep outer islands 1 sea tile from the main island</label>
@@ -656,10 +656,11 @@ function generate(){
 
   // --- budget split: fixed-size hexagon mains vs share-based ---
   const fixed=SHAPE_FIXED[S.mainShape];
-  const perMain=fixed?fixed:Math.max(1,S.mainTiles|0);   // hexagon locks itself to 19
-  let mainNeed=Math.min(perMain*nMainEff,totalBudget);
-  if(mainNeed<perMain*nMainEff)
-    warnMsg+=`Not enough owned tiles for ${nMainEff>1?nMainEff+' islands of ':''}${perMain} tiles. `;
+  // "Main island tiles" is the TOTAL across every main island; hexagons are 19 each.
+  const mainWanted=fixed?fixed*nMainEff:Math.max(nMainEff,S.mainTiles|0);
+  let mainNeed=Math.min(mainWanted,totalBudget);
+  if(mainNeed<mainWanted)
+    warnMsg+=`Not enough owned tiles for ${mainWanted} main-island tiles. `;
   let outerNeed=nOuterEff>0?Math.max(0,totalBudget-mainNeed):0;
   if(nOuterEff>0&&outerNeed<nOuterEff*3)
     warnMsg+=`Only ${outerNeed} tiles left for ${nOuterEff} outer islands. `;
@@ -711,30 +712,106 @@ function generate(){
   if(nOuterEff>0&&outerNeed>0){
     const perO=Math.floor(outerNeed/nOuterEff);
     let extraO=outerNeed-perO*nOuterEff;
-    for(let i=0;i<nOuterEff;i++){
-      const n=perO+(extraO-->0?1:0);
-      if(n<1)continue;
-      const land=[...cells.values()].filter(c=>c.type==='land');
-      const mainLandArr=land.filter(c=>mainIds.includes(c.island));
-      let best=null,bs=-1e9;
-      cells.forEach(cell=>{
-        if(cell.type!=='sea'||cell.c<=0||cell.c>=W-1||cell.r<=0||cell.r>=H-1)return;
-        const dLand=land.length?Math.min(...land.map(l=>hexDist(l,cell))):2;
-        if(dLand<2)return;
-        let s=(dLand===2?12:-(dLand-2)*5)+rnd()*2;
-        if(S.outerNearMain&&mainLandArr.length){
-          const dMain=Math.min(...mainLandArr.map(l=>hexDist(l,cell)));
-          s+=(dMain===2?60:-(dMain-2)*20); // hug the main island: exactly 1 sea tile away
+    const sizes=[];
+    for(let i=0;i<nOuterEff;i++)sizes.push(perO+(extraO-->0?1:0));
+
+    const freeSea=cell=>cell&&cell.type==='sea'&&cell.c>0&&cell.c<W-1&&cell.r>0&&cell.r<H-1;
+    const clearOf=(cell,arr,d)=>arr.every(o=>hexDist(o,cell)>=d);
+
+    if(corridor){
+      // ---- CHANNEL: reserve every seed first, then grow them together, so no
+      //      island's growth can steal the spot another one needs. ----
+      const mainCells=[...cells.values()].filter(c=>c.type==='land'&&mainIds.includes(c.island));
+      const midC=(Math.min(...mainCells.map(c=>c.c))+Math.max(...mainCells.map(c=>c.c)))/2;
+      const sides=[mainCells.filter(c=>c.c<midC), mainCells.filter(c=>c.c>=midC)].filter(s=>s.length);
+      const hub=pxOf((W-1)/2,(H-1)/2);
+      const seeds=[];
+      const near2=(cell,arr)=>arr.length&&Math.min(...arr.map(m=>hexDist(m,cell)))===2;
+
+      // two stepping stones off each main island, spread along its coast
+      const perSide=Math.min(2,Math.floor(nOuterEff/sides.length));
+      sides.forEach(side=>{
+        for(let k=0;k<perSide&&seeds.length<nOuterEff;k++){
+          let best=null,bs=-1e9;
+          cells.forEach(cell=>{
+            if(!freeSea(cell)||!corridor(cell))return;
+            if(!near2(cell,side))return;                  // exactly 1 sea tile from this main
+            if(!clearOf(cell,seeds,2))return;             // 1 sea tile between islands
+            if(!clearOf(cell,mainCells,2))return;
+            const already=seeds.filter(s=>near2(s,side));
+            let sc=rnd();
+            if(already.length)sc+=Math.min(...already.map(s=>hexDist(s,cell)))*8;  // spread apart
+            sc+=-Math.abs(cell.r-(H-1)/2)*0.6;
+            if(sc>bs){bs=sc;best=cell}
+          });
+          if(best)seeds.push(best);
         }
-        if(corridor){
-          if(!corridor(cell))return;                 // hard limit: stay in the channel
-          s+=-Math.abs(cell.r-(H-1)/2)*1.2;          // mild pull to mid-height
-        }
-        if(s>bs){bs=s;best=cell}
       });
-      if(!best)break;
-      placedOuter+=growIsland(cells,W,H,pxOf(best.c,best.r),n,idx,shapeScore('blob',rnd,compactW),corridor);
-      idx++;
+      // the rest fill the middle, each chained 1 sea tile onto what's there
+      while(seeds.length<nOuterEff){
+        let best=null,bs=-1e9;
+        cells.forEach(cell=>{
+          if(!freeSea(cell)||!corridor(cell))return;
+          if(!clearOf(cell,seeds,2)||!clearOf(cell,mainCells,2))return;
+          const all=[...seeds,...mainCells];
+          const d=Math.min(...all.map(o=>hexDist(o,cell)));
+          if(d<2)return;
+          const p=pxOf(cell.c,cell.r);
+          const sc=-Math.hypot(p.x-hub.x,p.y-hub.y)*8-(d-2)*20+rnd();
+          if(sc>bs){bs=sc;best=cell}
+        });
+        if(!best)break;
+        seeds.push(best);
+      }
+      // plant them, then grow round-robin so they expand evenly
+      const grown=[];
+      seeds.forEach((s,i)=>{s.type='land';s.island=idx+i;grown.push({id:idx+i,size:1,target:sizes[i]||1})});
+      placedOuter+=seeds.length;
+      let progress=true;
+      while(progress){
+        progress=false;
+        for(const g of grown){
+          if(g.size>=g.target)continue;
+          const mine=[...cells.values()].filter(c=>c.type==='land'&&c.island===g.id);
+          let pick=null,pb=1e9;
+          mine.forEach(c=>neighbors(c.c,c.r).forEach(([x,y])=>{
+            const n=cells.get(key(x,y));
+            if(!freeSea(n)||!corridor(n))return;
+            const ok=neighbors(n.c,n.r).every(([a,b])=>{
+              const q=cells.get(key(a,b));
+              return !q||q.type==='sea'||q.island===g.id;
+            });
+            if(!ok)return;
+            const p=pxOf(n.c,n.r);
+            const sc=Math.hypot(p.x-hub.x,p.y-hub.y)+rnd();
+            if(sc<pb){pb=sc;pick=n}
+          }));
+          if(pick){pick.type='land';pick.island=g.id;g.size++;placedOuter++;progress=true}
+        }
+      }
+      idx+=seeds.length;
+    }else{
+      for(let i=0;i<nOuterEff;i++){
+        const n=sizes[i];
+        if(n<1)continue;
+        const land=[...cells.values()].filter(c=>c.type==='land');
+        const mainLandArr=land.filter(c=>mainIds.includes(c.island));
+        let best=null,bs=-1e9;
+        cells.forEach(cell=>{
+          if(!freeSea(cell))return;
+          const dLand=land.length?Math.min(...land.map(l=>hexDist(l,cell))):2;
+          if(dLand<2)return;
+          let s=(dLand===2?12:-(dLand-2)*5)+rnd()*2;
+          if(S.outerNearMain&&mainLandArr.length){
+            const dMain=Math.min(...mainLandArr.map(l=>hexDist(l,cell)));
+            s+=(dMain===2?60:-(dMain-2)*20);
+          }
+          if(s>bs){bs=s;best=cell}
+        });
+        if(!best)break;
+        placedOuter+=growIsland(cells,W,H,pxOf(best.c,best.r),n,idx,shapeScore('blob',rnd,compactW));
+        idx++;
+      }
     }
   }
   let placed=placedMain+placedOuter;
@@ -1539,7 +1616,7 @@ function updateReadouts(){
   document.getElementById('btnTrim').classList.toggle('toggled',S.trimSea);
   const fx=SHAPE_FIXED[S.mainShape];
   document.getElementById('mainShareRow').classList.toggle('off',!!fx);
-  if(fx){$('mainTiles').value=fx;$('mainTilesv').textContent=fx}
+  if(fx){const tot=fx*(S.randMain?S.nMain:S.nMain);$('mainTiles').value=Math.min(60,tot);$('mainTilesv').textContent=tot}
 }
 function buildFogIslandUI(){
   const box=document.getElementById('fogIslands');
@@ -1595,12 +1672,12 @@ const PRESETS={
     fogMode:'none',coveredShow:'blank',resMode:'random'},
   sf_fourislands:{label:'The Four Islands',needExps:['sea'],
     tiles:{wood:5,brick:4,sheep:5,wheat:5,ore:4,desert:0,gold:0},ports:BASE_PORTS,
-    mapW:12,mapH:10,nMain:4,mainShape:'blob',mainPos:'center',mainTiles:6,nOuter:0,compact:85,
+    mapW:12,mapH:10,nMain:4,mainShape:'blob',mainPos:'center',mainTiles:23,nOuter:0,compact:85,
     numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
     fogMode:'none',coveredShow:'blank',resMode:'random'},
   sf_fogislands:{label:'The Fog Islands',needExps:['sea'],
     tiles:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:0,gold:2},ports:BASE_PORTS,
-    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:9,nOuter:3,compact:75,
+    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:18,nOuter:3,compact:75,
     numMode:'balanced',no68:false,portMode:'random',portClassic:false,portScope:'main',portUse:100,
     fogMode:'coverLandOther',coveredShow:'blank',resMode:'random'},
   sf_desert:{label:'Through the Desert',needExps:['sea'],
@@ -1610,18 +1687,18 @@ const PRESETS={
     fogMode:'none',coveredShow:'blank',resMode:'random'},
   sf_newworld:{label:'New World (random)',needExps:['sea'],
     tiles:null,ports:null,   // null = use whatever the player owns
-    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'random',mainTiles:12,nOuter:4,compact:60,
+    mapW:13,mapH:10,nMain:2,mainShape:'blob',mainPos:'random',mainTiles:24,nOuter:4,compact:60,
     numMode:'random',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
     fogMode:'none',coveredShow:'blank',resMode:'random'},
   foggy_channel:{label:'Foggy Channel',needExps:['sea'],
     tiles:{wood:5,brick:5,sheep:5,wheat:5,ore:5,desert:1,gold:2},ports:BASE_PORTS,
-    mapW:15,mapH:9,nMain:2,mainShape:'rect',mainPos:'sides',mainTiles:8,nOuter:5,compact:95,
+    mapW:15,mapH:11,nMain:2,mainShape:'rect',mainPos:'sides',mainTiles:16,nOuter:5,compact:95,
     rectTall:true,outerChannel:true,outerNearMain:true,
     numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'main',portUse:100,
     fogMode:'coverLandOther',coveredShow:'blank',resMode:'random'},
   big_ep:{label:'Big map (E&P scale)',needExps:['sea'],
     tiles:null,ports:null,
-    mapW:18,mapH:13,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:16,nOuter:6,compact:70,
+    mapW:18,mapH:13,nMain:2,mainShape:'blob',mainPos:'center',mainTiles:32,nOuter:6,compact:70,
     numMode:'balanced',no68:true,portMode:'random',portClassic:false,portScope:'all',portUse:100,
     fogMode:'coverOther',coveredShow:'number',resMode:'random'},
 };
@@ -1861,7 +1938,7 @@ function wire(){
     S.nMain=pick([1,1,1,2,2,3,4]);
     S.mainShape=pick(['hex','hex','diamond','rect','blob','blob']);
     S.mainPos=pick(['center','center','west','east','north','south','random']);
-    S.mainTiles=ri(8,24);
+    S.mainTiles=ri(10,34);
     S.randOuter=false;S.randMain=false;S.outerChannel=false;S.rectTall=false;S.nOuter=ri(0,8);
     S.outerNearMain=Math.random()<0.35;
     S.compact=ri(30,100);

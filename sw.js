@@ -1,6 +1,6 @@
 /* Service worker: makes the app work fully offline.
    Bump CACHE_VERSION whenever you change index.html so users get the update. */
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = `map-designer-${CACHE_VERSION}`;
 
 const ASSETS = [
