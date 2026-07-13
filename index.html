@@ -176,7 +176,7 @@
             <div class="row"><label>Base height (tiles)</label><input type="range" id="mapH" min="5" max="20" value="7"><span class="val" id="mapHv"></span></div>
             <div class="row"><label>Land tiles to use</label><input type="range" id="landUse" min="10" max="100" value="100"><span class="val" id="landUsev"></span></div>
             <p class="hint" id="landHint"></p>
-            <label class="chk"><input type="checkbox" id="trimSea"> Trim excess sea <small>(keep only 1 tile around land)</small></label>
+            <label class="chk"><input type="checkbox" id="trimSea" checked> Trim excess sea <small>(keep only 1 tile around land)</small></label>
           </div>
         </details>
       </div>
@@ -251,7 +251,7 @@
           </select>
         </div>
         <div class="row" id="mainShareRow"><label>Main land share</label><input type="range" id="mainShare" min="20" max="100" value="100"><span class="val" id="mainSharev"></span></div>
-        <label class="chk"><input type="checkbox" id="baseMain"> Main island uses base-game tiles &amp; numbers <small>(even classic mix)</small></label>
+        <label class="chk"><input type="checkbox" id="baseMain" checked> Main island uses base-game tiles &amp; numbers <small>(even classic mix)</small></label>
         <div class="row"><label>Outer islands</label><input type="range" id="nOuter" min="0" max="8" value="0"><span class="val" id="nOuterv"></span></div>
         <label class="chk"><input type="checkbox" id="outerNearMain"> Keep outer islands 1 sea tile from the main island</label>
         <div class="btnrow"><button class="btn small" id="btnRandIslands">🎲 Randomise number of islands</button></div>
@@ -276,7 +276,7 @@
     <details>
       <summary>Ports</summary>
       <div class="sec">
-        <label class="chk"><input type="checkbox" id="portClassic"> Classic Catan port positions <small>(standard board layout)</small></label>
+        <label class="chk"><input type="checkbox" id="portClassic" checked> Classic Catan port positions <small>(standard board layout)</small></label>
         <div class="row"><label>Distribution</label>
           <select id="portMode">
             <option value="random">Random along coast</option>
@@ -408,10 +408,10 @@ const FRESH = () => ({
   ports:{generic:4,wood:1,brick:1,sheep:1,wheat:1,ore:1},
   scalePct:100, mapW:7, mapH:7, landUse:100,
   nMain:1, mainShape:'hex', mainPos:'center', mainShare:100,
-  nOuter:0, compact:70, baseMain:false,
-  hexmm:80, tableW:120, tableL:90, trimSea:false, showTable:false,
+  nOuter:0, compact:70, baseMain:true,
+  hexmm:80, tableW:120, tableL:90, trimSea:true, showTable:false,
   numMode:'balanced', no68:true,
-  portMode:'random', portClassic:false, portScope:'main', portUse:100, outerNearMain:false,
+  portMode:'random', portClassic:true, portScope:'main', portUse:100, outerNearMain:false,
   fogMode:'none', coveredShow:'blank', fogIslandSel:[], fogRandomN:2,
   useArt:true,
   seed:(Math.random()*1e9)|0, numSeed:1, portSeed:1, resSeed:1,
@@ -916,13 +916,17 @@ function assignPorts(){
     const cands=[...world.cells.values()].filter(c=>
       c.type==='sea'&&!c.port&&landNbrs(c).some(o=>faceFilter(o)));
     let bestPlan=null;
-    for(let attempt=0;attempt<8;attempt++){
+    for(let attempt=0;attempt<40;attempt++){
+      // vary the order each attempt: greedy placement can dead-end under the
+      // corner rule, so we retry and keep the plan that seats the most pieces.
+      const order=attempt===0?[...list]:shuffle([...list],rnd);
+      if(S.portMode!=='random')order.sort((a,b)=>(a==='generic')-(b==='generic'));
       const plan=[], planCells=new Set(), servedT=new Set(served), cornersT=[...placedCorners];
       const cornerOKT=(cell,di)=>{
         const cand=cornersOf(cell,di);
         return cornersT.every(p=>cand.every(c=>Math.hypot(c[0]-p[0],c[1]-p[1])>=1.5*s));
       };
-      for(const kind of list){
+      for(const kind of order){
         let best=null,bestScore=-1e9;
         for(const cell of cands){
           if(planCells.has(cell))continue;
