@@ -125,3 +125,15 @@ settings -> clear site data, or on desktop DevTools -> Application -> Service Wo
 - Because the data is tied to the URL, **if you later move to a custom domain, users'
   saved setups won't follow.** Do it early if you're going to do it.
 - **No analytics, no tracking, no server, no accounts.** Nothing leaves the device.
+
+## Visit counter
+
+The header shows a visit count. It first tries a free public counter service
+(counterapi.dev) so you can see total visits across everyone; if that's
+unreachable it silently falls back to a per-device count. The counter never
+blocks the app and works offline (as the local fallback).
+
+If you deploy this publicly and want the global count to be *yours*, change the
+`ns` value inside `initVisitCounter()` in index.html to a unique name of your own
+(e.g. your site name). If you'd rather not use a third-party service at all, tell
+me and I can swap it for a GitHub-based counter or remove it.
