@@ -164,9 +164,15 @@
     <details>
       <summary>What size is your table?</summary>
       <div class="sec">
-        <div class="row"><label>Table size</label>
+        <div class="row"><label>Table shape</label>
+          <select id="tableShape"><option value="rect">Rectangular</option><option value="round">Round</option></select>
+        </div>
+        <div class="row" id="tableRectRow"><label>Table size</label>
           <input type="number" id="tableW" value="120" min="40" max="400"> ×
           <input type="number" id="tableL" value="90" min="40" max="400"> <span class="hint">cm</span>
+        </div>
+        <div class="row" id="tableRoundRow" style="display:none"><label>Table diameter</label>
+          <input type="number" id="tableD" value="120" min="40" max="400"> <span class="hint">cm</span>
         </div>
         <div class="row"><label>Tile width</label><input type="number" id="hexmm" value="80" min="30" max="150"> <span class="hint">mm</span></div>
         <div class="btnrow">
@@ -175,7 +181,7 @@
         </div>
         <p class="hint" id="tableDefHint"></p>
         <label class="chk"><input type="checkbox" id="showTable"> Show table outline on map</label>
-        <p class="hint">The board is checked against your table in both orientations — if it only fits rotated 90°, you'll see "(rotated)".</p>
+        <p class="hint">A rectangular table is checked in both orientations — if the board only fits rotated 90°, you'll see "(rotated)". A round table is checked against every corner of the board.</p>
         <details style="margin-top:8px">
           <summary style="font-size:.9rem">Advanced</summary>
           <div class="sec">
@@ -435,7 +441,7 @@ const EXP_TILES = {
 /* ============================== STATE ============================== */
 // which settings belong to which "save my defaults" button
 const SECTION_KEYS = {
-  table: ['hexmm','tableW','tableL','showTable','trimSea','mapW','mapH','landUse'],
+  table: ['hexmm','tableShape','tableW','tableL','tableD','showTable','trimSea','mapW','mapH','landUse'],
   pool:  ['exps','tiles','ports'],
 };
 
@@ -447,7 +453,7 @@ const FRESH = () => ({
   nMain:1, randMain:false, randMainMin:1, randMainMax:2, mainShape:'hex', mainPos:'center', mainTiles:19,
   nOuter:0, randOuter:false, randOuterMin:1, randOuterMax:4, compact:70, baseMain:true, resMode:'random',
   rectTall:false, outerChannel:false,
-  hexmm:80, tableW:120, tableL:90, trimSea:true, showTable:false,
+  hexmm:80, tableShape:'rect', tableW:120, tableL:90, tableD:120, trimSea:true, showTable:false,
   numMode:'balanced', no68:true,
   portMode:'random', portClassic:true, portScope:'main', portUse:100, outerNearMain:false,
   fogMode:'none', coveredShow:'blank', fogIslandSel:[], fogRandomN:2, scenario:null, useAllTiles:false,
@@ -1389,19 +1395,27 @@ function render(){
   // optional table outline: canvas grows to hold the table, map centred on it
   let canvasW=svgW, canvasH=svgH, mapOx=0, mapOy=0, tableRect=null;
   if(S.showTable){
-    const pxmm=w/S.hexmm;
-    let tw=S.tableW*10*pxmm, tl=S.tableL*10*pxmm, rotated=false;
-    if(!(tw>=svgW&&tl>=svgH)&&(tl>=svgW&&tw>=svgH)){[tw,tl]=[tl,tw];rotated=true}
+    const pxmm=w/S.hexmm, round=S.tableShape==='round';
+    let tw=(round?S.tableD:S.tableW)*10*pxmm, tl=(round?S.tableD:S.tableL)*10*pxmm, rotated=false;
+    if(!round&&!(tw>=svgW&&tl>=svgH)&&(tl>=svgW&&tw>=svgH)){[tw,tl]=[tl,tw];rotated=true}
     canvasW=Math.max(svgW,tw)+10; canvasH=Math.max(svgH,tl)+10;
     mapOx=(canvasW-svgW)/2; mapOy=(canvasH-svgH)/2;
-    tableRect={x:(canvasW-tw)/2,y:(canvasH-tl)/2,w:tw,h:tl,rotated};
+    tableRect={x:(canvasW-tw)/2,y:(canvasH-tl)/2,w:tw,h:tl,rotated,round};
   }
   lastCanvas={w:canvasW,h:canvasH};
   renderXf={ox:mapOx+baseOx, oy:mapOy+baseOy};
   let out=`<svg width="${(canvasW*zoom).toFixed(0)}" height="${(canvasH*zoom).toFixed(0)}" viewBox="0 0 ${canvasW} ${canvasH}" xmlns="http://www.w3.org/2000/svg">`;
   if(tableRect){
-    out+=`<rect x="${tableRect.x.toFixed(1)}" y="${tableRect.y.toFixed(1)}" width="${tableRect.w.toFixed(1)}" height="${tableRect.h.toFixed(1)}" rx="14" fill="rgba(224,168,60,.05)" stroke="#e0a83c" stroke-width="2.5" stroke-dasharray="10 6"/>`;
-    out+=`<text x="${(tableRect.x+12).toFixed(1)}" y="${(tableRect.y+20).toFixed(1)}" font-size="13" fill="#e0a83c" font-family="Grenze,serif" font-weight="600">Table ${S.tableW}×${S.tableL} cm${tableRect.rotated?' (rotated)':''}</text>`;
+    const tStyle=`fill="rgba(224,168,60,.05)" stroke="#e0a83c" stroke-width="2.5" stroke-dasharray="10 6"`;
+    const tFont=`font-size="13" fill="#e0a83c" font-family="Grenze,serif" font-weight="600"`;
+    if(tableRect.round){
+      const r=tableRect.w/2, cx=tableRect.x+r, cy=tableRect.y+r;
+      out+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" ${tStyle}/>`;
+      out+=`<text x="${cx.toFixed(1)}" y="${(tableRect.y+22).toFixed(1)}" text-anchor="middle" ${tFont}>Round table ⌀${S.tableD} cm</text>`;
+    }else{
+      out+=`<rect x="${tableRect.x.toFixed(1)}" y="${tableRect.y.toFixed(1)}" width="${tableRect.w.toFixed(1)}" height="${tableRect.h.toFixed(1)}" rx="14" ${tStyle}/>`;
+      out+=`<text x="${(tableRect.x+12).toFixed(1)}" y="${(tableRect.y+20).toFixed(1)}" ${tFont}>Table ${S.tableW}×${S.tableL} cm${tableRect.rotated?' (rotated)':''}</text>`;
+    }
   }
   out+=`<defs><clipPath id="hexclip" clipPathUnits="objectBoundingBox">
     <polygon points="0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25"/></clipPath>`;
@@ -1645,14 +1659,34 @@ function footprintMM(){
   const bb=world?visibleBBox():{cols:effDims().W,rows:effDims().H};
   return {w:hw*(bb.cols+0.5), l:hh*(0.75*(bb.rows-1)+1), W:bb.cols, H:bb.rows};
 }
+// smallest round-table diameter (mm) that holds every visible tile, measured from the board's centre
+function roundDiameterMM(){
+  if(!world)return Infinity;
+  const s=HEXSZ, w=SQ3*s, h=2*s;
+  const pts=[];
+  world.cells.forEach(c=>{if(seaVisible(c)){const [cx,cy]=centerOf(c,w,h);pts.push(...corners(cx,cy,s))}});
+  if(!pts.length)return 0;
+  const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+  const mx=(Math.min(...xs)+Math.max(...xs))/2, my=(Math.min(...ys)+Math.max(...ys))/2;
+  const r=Math.max(...pts.map(p=>Math.hypot(p[0]-mx,p[1]-my)));
+  return 2*r*S.hexmm/w;
+}
 function updateReadouts(){
   const f=footprintMM();
-  const fitsNormal=f.w<=S.tableW*10&&f.l<=S.tableL*10;
-  const fitsRotated=f.w<=S.tableL*10&&f.l<=S.tableW*10;
-  const over=!fitsNormal&&!fitsRotated;
   const el=document.getElementById('footprint');
+  let over,tableTxt;
+  if(S.tableShape==='round'){
+    const need=roundDiameterMM();
+    over=need>S.tableD*10;
+    tableTxt=`round table ⌀${S.tableD} ${over?`— too big! (needs ⌀${Math.ceil(need/10)})`:'✓'}`;
+  }else{
+    const fitsNormal=f.w<=S.tableW*10&&f.l<=S.tableL*10;
+    const fitsRotated=f.w<=S.tableL*10&&f.l<=S.tableW*10;
+    over=!fitsNormal&&!fitsRotated;
+    tableTxt=`table ${S.tableW}×${S.tableL} ${over?'— too big!':(fitsNormal?'✓':'✓ (rotated)')}`;
+  }
   el.className=over?'over':'';
-  el.innerHTML=`${f.W}×${f.H} tiles · <b>${(f.w/10).toFixed(0)} × ${(f.l/10).toFixed(0)} cm</b> · table ${S.tableW}×${S.tableL} ${over?'— too big!':(fitsNormal?'✓':'✓ (rotated)')}`;
+  el.innerHTML=`${f.W}×${f.H} tiles · <b>${(f.w/10).toFixed(0)} × ${(f.l/10).toFixed(0)} cm</b> · ${tableTxt}`;
   const land=totalLand();
   const used=[...world.cells.values()].filter(c=>c.type==='land').length;
   document.getElementById('landHint').innerHTML=
@@ -1914,7 +1948,10 @@ function syncUI(){
   $('exp56').checked=S.exps.e56;$('expSea').checked=S.exps.sea;$('expSea56').checked=S.exps.sea56;
   $('expEP').checked=S.exps.ep;$('expCK').checked=S.exps.ck;
   SLIDERS.forEach(([i,suf])=>{$(i).value=S[i];$(i+'v').textContent=S[i]+suf});
-  $('hexmm').value=S.hexmm;$('tableW').value=S.tableW;$('tableL').value=S.tableL;
+  $('hexmm').value=S.hexmm;$('tableW').value=S.tableW;$('tableL').value=S.tableL;$('tableD').value=S.tableD;
+  $('tableShape').value=S.tableShape;
+  $('tableRectRow').style.display=S.tableShape==='round'?'none':'flex';
+  $('tableRoundRow').style.display=S.tableShape==='round'?'flex':'none';
   $('mainShape').value=S.mainShape;$('mainPos').value=S.mainPos;$('resMode').value=S.resMode;
   $('useAllTiles').checked=!!S.useAllTiles;
   $('randMain').checked=S.randMain;
@@ -1975,7 +2012,8 @@ function wire(){
     S[i]=Math.max(0,Math.min(20,+e.target.value||0));
     syncUI();clearEdits();regen();
   }));
-  ['hexmm','tableW','tableL'].forEach(i=>$(i).addEventListener('change',e=>{S[i]=+e.target.value||S[i];updateReadouts()}));
+  ['hexmm','tableW','tableL','tableD'].forEach(i=>$(i).addEventListener('change',e=>{S[i]=+e.target.value||S[i];if(S.showTable)render();else updateReadouts()}));
+  $('tableShape').addEventListener('change',e=>{S.tableShape=e.target.value;syncUI();if(S.showTable)render();else updateReadouts()});
   $('trimSea').addEventListener('change',e=>{S.trimSea=e.target.checked;render()});
   $('showTable').addEventListener('change',e=>{S.showTable=e.target.checked;render()});
   $('baseMain').addEventListener('change',e=>{S.baseMain=e.target.checked;clearEdits();regen()});
@@ -1984,8 +2022,10 @@ function wire(){
     snapshot();
     const hw=S.hexmm,hh=hw*2/SQ3;
     S.scalePct=100;
-    S.mapW=Math.min(26,Math.max(5,Math.floor(S.tableW*10/hw-0.5)));
-    S.mapH=Math.min(20,Math.max(5,Math.floor(((S.tableL*10/hh)-1)/0.75+1)));
+    // a round table gets the largest square base that sits inside the circle
+    const tw=S.tableShape==='round'?S.tableD/Math.SQRT2:S.tableW, tl=S.tableShape==='round'?tw:S.tableL;
+    S.mapW=Math.min(26,Math.max(5,Math.floor(tw*10/hw-0.5)));
+    S.mapH=Math.min(20,Math.max(5,Math.floor(((tl*10/hh)-1)/0.75+1)));
     syncUI();clearEdits();regen();
   };
   $('numMode').addEventListener('change',e=>{S.numMode=e.target.value;assignNumbers();render()});
